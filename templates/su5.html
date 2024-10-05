@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Waste Estimation</title>
+    <style>
+        /* General body style */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f9f5; /* Light green background */
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* Main container style */
+        #main-container {
+            max-width: 600px;
+            margin: auto;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #4CAF50; /* Green color for the title */
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: #4CAF50; /* Green button */
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #45a049; /* Darker green on hover */
+        }
+
+        #result,
+        #locationInfo,
+        #successMessage,
+        #message {
+            display: none;
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            background-color: #e8f5e9; /* Light green background */
+        }
+
+        #map {
+            width: 100%;
+            height: 400px;
+            margin-top: 20px;
+            border-radius: 4px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="main-container">
+        <h1>Event Waste Estimation</h1>
+        <form id="eventForm" method="POST" action="/submit" onsubmit="return submitForm(event)">
+            <label for="eventName">Event Name:</label>
+            <input type="text" id="eventName" name="eventName" required>
+
+            <label for="eventDate">Event Date:</label>
+            <input type="date" id="eventDate" name="eventDate" required>
+
+            <label for="attendees">Number of Attendees:</label>
+            <input type="number" id="attendees" name="attendees" required>
+
+            <label for="eventType">Event Type:</label>
+            <select id="eventType" name="eventType" required>
+                <option value="wedding">Wedding/Banquet</option>
+                <option value="concert">Concert/Festival</option>
+                <option value="exhibition">Exhibition</option>
+                <option value="conference">Conference/Business</option>
+                <option value="birthday">Birthday Party</option>
+                <option value="family">Family Get-Together</option>
+                <option value="anniversary">Anniversary Celebration</option>
+                <option value="baby">Baby Shower</option>
+                <option value="graduation">Graduation Party</option>
+                <option value="retirement">Retirement Party</option>
+                <option value="engagement">Engagement Party</option>
+                <option value="housewarming">Housewarming Party</option>
+                <option value="picnic">Picnic/Outdoor Gathering</option>
+            </select>
+
+            <label for="address">Event Address:</label>
+            <input type="text" id="address" name="address">
+            <button type="button" onclick="getLocation()">Find Location</button>
+
+            <!-- Map container -->
+            <div id="map"></div>
+
+            <!-- Display for waste estimate, vehicle, personnel, and location -->
+            <div id="locationInfo">
+                <p id="location"></p>
+            </div>
+            <div id="result">
+                <p><strong>Estimated Waste:</strong> <span id="wasteEstimateDisplay"></span></p>
+                <p id="vehicleEstimate"></p>
+                <p id="personnelEstimate"></p>
+            </div>
+
+            <div id="successMessage">
+                <p>Registration Successful! You have registered successfully.</p>
+            </div>
+
+            <!-- Hidden fields for latitude, longitude, waste estimate, vehicles, and personnel -->
+            <input type="hidden" id="latitude" name="latitude">
+            <input type="hidden" id="longitude" name="longitude">
+            <input type="hidden" id="wasteEstimate" name="wasteEstimate">
+            <input type="hidden" id="vehiclesNeeded" name="vehiclesNeeded">
+            <input type="hidden" id="personnelNeeded" name="personnelNeeded">
+
+            <button type="submit">Submit</button>
+        </form>
+
+        <!-- Flash message display -->
+        <div id="message" style="display: none;"></div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="message">
+                    {% for category, message in messages %}
+                        <p class="{{ category }}">{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Include Google Maps JavaScript API -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAZUGoqEFEKNUM30vpCm4Qs1pZkeacFVsA&libraries=places"></script>
+
+    <script>
+        let map, marker;
+
+        // Initialize Google Map with user's location
+        function initMap() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    const userLocation = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+
+                    map = new google.maps.Map(document.getElementById("map"), {
+                        center: userLocation,
+                        zoom: 12
+                    });
+
+                    marker = new google.maps.Marker({
+                        position: userLocation,
+                        map: map,
+                        draggable: true
+                    });
+
+                    document.getElementById('latitude').value = userLocation.lat;
+                    document.getElementById('longitude').value = userLocation.lng;
+                    document.getElementById('location').innerText = "Your Location: Latitude " + userLocation.lat + ", Longitude " + userLocation.lng;
+                    document.getElementById('locationInfo').style.display = 'block';
+                }, () => {
+                    handleLocationError(true);
+                });
+            } else {
+                handleLocationError(false);
+            }
+        }
+
+        // Handle location errors
+        function handleLocationError(browserHasGeolocation) {
+            const userLocation = { lat: 12.9716, lng: 77.5946 }; // Default location if error occurs
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: userLocation,
+                zoom: 12
+            });
+
+            marker = new google.maps.Marker({
+                position: userLocation,
+                map: map,
+                draggable: true
+            });
+
+            alert(browserHasGeolocation ?
+                'Error: The Geolocation service failed.' :
+                'Error: Your browser doesn\'t support geolocation.');
+        }
+
+        // Estimate waste, vehicles, and personnel based on attendees and event type
+        function estimateWaste(attendees, eventType) {
+            let wastePerPerson, vehiclesPerKg, personnelPerKg;
+
+            // Waste estimation logic based on event type
+            switch (eventType) {
+                case 'wedding':
+                case 'banquet':
+                    wastePerPerson = 1.5; // kg per person
+                    vehiclesPerKg = 0.002; // 1 vehicle per 500 kg
+                    personnelPerKg = 0.01; // 1 personnel per 100 kg
+                    break;
+                case 'concert':
+                case 'festival':
+                    wastePerPerson = 2.5;
+                    vehiclesPerKg = 0.0015;
+                    personnelPerKg = 0.015;
+                    break;
+                case 'exhibition':
+                    wastePerPerson = 2.0;
+                    vehiclesPerKg = 0.0012;
+                    personnelPerKg = 0.012;
+                    break;
+                case 'conference':
+                    wastePerPerson = 1.8;
+                    vehiclesPerKg = 0.0018;
+                    personnelPerKg = 0.018;
+                    break;
+                case 'birthday':
+                    wastePerPerson = 1.2;
+                    vehiclesPerKg = 0.0025;
+                    personnelPerKg = 0.008;
+                    break;
+                case 'family':
+                    wastePerPerson = 1.0;
+                    vehiclesPerKg = 0.003;
+                    personnelPerKg = 0.007;
+                    break;
+                case 'anniversary':
+                    wastePerPerson = 1.3;
+                    vehiclesPerKg = 0.0023;
+                    personnelPerKg = 0.009;
+                    break;
+                case 'baby':
+                    wastePerPerson = 1.1;
+                    vehiclesPerKg = 0.0035;
+                    personnelPerKg = 0.006;
+                    break;
+                case 'graduation':
+                    wastePerPerson = 1.4;
+                    vehiclesPerKg = 0.002;
+                    personnelPerKg = 0.008;
+                    break;
+                case 'retirement':
+                    wastePerPerson = 1.6;
+                    vehiclesPerKg = 0.0021;
+                    personnelPerKg = 0.0085;
+                    break;
+                case 'engagement':
+                    wastePerPerson = 1.7;
+                    vehiclesPerKg = 0.0019;
+                    personnelPerKg = 0.0075;
+                    break;
+                case 'housewarming':
+                    wastePerPerson = 1.4;
+                    vehiclesPerKg = 0.0022;
+                    personnelPerKg = 0.008;
+                    break;
+                case 'picnic':
+                    wastePerPerson = 1.0;
+                    vehiclesPerKg = 0.0035;
+                    personnelPerKg = 0.006;
+                    break;
+                default:
+                    wastePerPerson = 1.5;
+                    vehiclesPerKg = 0.002;
+                    personnelPerKg = 0.01;
+                    break;
+            }
+
+            const totalWaste = wastePerPerson * attendees;
+            const vehiclesNeeded = Math.ceil(totalWaste * vehiclesPerKg);
+            const personnelNeeded = Math.ceil(totalWaste * personnelPerKg);
+
+            // Update the hidden inputs and display the results
+            document.getElementById('wasteEstimate').value = totalWaste.toFixed(2);
+            document.getElementById('vehiclesNeeded').value = vehiclesNeeded;
+            document.getElementById('personnelNeeded').value = personnelNeeded;
+
+            document.getElementById('wasteEstimateDisplay').innerText = totalWaste.toFixed(2) + " kg";
+            document.getElementById('vehicleEstimate').innerText = "Estimated Vehicles Needed: " + vehiclesNeeded;
+            document.getElementById('personnelEstimate').innerText = "Estimated Personnel Needed: " + personnelNeeded;
+
+            document.getElementById('result').style.display = 'block';
+        }
+
+        // Get location and update the map
+        function getLocation() {
+            const address = document.getElementById('address').value;
+            const geocoder = new google.maps.Geocoder();
+
+            geocoder.geocode({ 'address': address }, function (results, status) {
+                if (status === 'OK') {
+                    map.setCenter(results[0].geometry.location);
+                    marker.setPosition(results[0].geometry.location);
+                    document.getElementById('latitude').value = results[0].geometry.location.lat();
+                    document.getElementById('longitude').value = results[0].geometry.location.lng();
+                    document.getElementById('location').innerText = "Location: " + address;
+                    document.getElementById('locationInfo').style.display = 'block';
+
+                    // Estimate waste
+                    const attendees = parseInt(document.getElementById('attendees').value);
+                    const eventType = document.getElementById('eventType').value;
+                    estimateWaste(attendees, eventType);
+                } else {
+                    alert('Geocode was not successful for the following reason: ' + status);
+                }
+            });
+        }
+
+        // Submit form function
+        function submitForm(event) {
+            // Validate before submission if necessary
+            const address = document.getElementById('address').value;
+            if (!address) {
+                alert("Please enter a valid address.");
+                return false; // Prevent form submission
+            }
+            return true; // Allow form submission
+        }
+
+        // Initialize map on window load
+        window.onload = initMap;
+    </script>
+</body>
+
+</html>
